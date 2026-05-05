@@ -26,8 +26,9 @@ from src.utils.importing import import_class
 #     app.state.scheduler = scheduler
 #     create_routes(app, app.state.scheduler)
 
-async def create_app(config):
-    app = FastAPI()
+from contextlib import asynccontextmanager
+
+def create_app(config):
     model_class = import_class(config.model.class_path)
     model = model_class(**config.model.init_kwargs)
     scheduler = BatchScheduler(
@@ -35,10 +36,15 @@ async def create_app(config):
         max_batch_size=config.scheduler.max_batch_size,
         max_delay_ms=config.scheduler.max_delay_ms,
     )
-    asyncio.create_task(scheduler.run()) 
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        task = asyncio.create_task(scheduler.run())
+        yield
+        task.cancel()
+
+    app = FastAPI(lifespan=lifespan)
     app.state.scheduler = scheduler
     create_routes(app, app.state.scheduler)
-
-
     
-    
+    return app
