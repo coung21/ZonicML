@@ -1,20 +1,43 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 import yaml
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 
 
 class ModelConfig(BaseModel):
-    class_path: str
-    init_kwargs: dict = Field(default_factory=dict)
+    class_path: Optional[str] = None
+    init_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    type: Optional[str] = None
+    path: Optional[str] = None
+    device: str = "cpu"
+    input_shape: Optional[List[int]] = None
+    framework_kwargs: Dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode='after')
+    def check_model_source(self):
+        if not self.class_path and not (self.type and self.path):
+            raise ValueError(
+                "Must provide either 'class_path' (custom code) "
+                "or both 'type' and 'path' (no-code model)."
+            )
+        return self
 
 class SchedulerConfig(BaseModel):
-    max_batch_size: int = Field(..., gt=0, description="Maximum batch size for inference")
-    max_delay_ms: int = Field(..., gt=0, description="Maximum delay in milliseconds before inference")
+    max_batch_size: int = Field(..., gt=0)
+    max_delay_ms: float = Field(..., gt=0)
+    adaptive: bool = False
+    target_latency_ms: float = Field(100.0, gt=0)
+    min_delay_ms: float = Field(5.0, gt=0)
+    max_delay_ms_cap: float = Field(500.0, gt=0)
+    pid_kp: float = 0.1
+    pid_ki: float = 0.01
+    pid_kd: float = 0.05
+    max_queue_size: int = Field(1000, gt=0)
 
 class ServerConfig(BaseModel):
-    port: int = Field(default=8000, description="Port number for the server")
-    host: str = Field(default="0.0.0.0", description="Host name for the server")
+    host: str = "0.0.0.0"
+    port: int = 8000
+    request_timeout: int = 30
 
 class Config(BaseModel):
     model: ModelConfig
